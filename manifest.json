@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "Moodle Captcha Solver",
+    "version": "1.0",
+    "description": "自動填寫 Moodle 驗證碼",
+    "permissions": ["activeTab", "scripting"],
+    "host_permissions": ["https://*.moodle.org/*", "https://moodle.ncku.edu.tw/*"],
+    "content_scripts": [
+      {
+        "matches": ["https://*.moodle.org/*", "https://moodle.ncku.edu.tw/*"],
+        "js": ["content.js"]
+      }
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "icon.png"
+      }
+    }
+  }
+  
