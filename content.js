@@ -80,44 +80,28 @@ function processCaptcha(captchaImage) {
       return;
   }
 
+  
+
   Tesseract.recognize(processedCanvas.toDataURL(), 'eng', {
-      logger: (m) => console.log('OCR Progress:', m),
-      tessedit_char_whitelist: '0123456789'
-  }).then(({ data: { text } }) => {
-      const cleanedText = text.replace(/[^0-9]/g, '');
-      if (cleanedText.length !== 4) {
-          console.warn('Incorrect CAPTCHA length, retrying...');
-          captchaImage.click(); // Click the image to refresh CAPTCHA
-          setTimeout(() => processCaptcha(captchaImage), 1000); // Retry after 1 second
-          return;
-      }
-      console.log('CAPTCHA identified:', cleanedText);
+        logger: (m) => console.log('OCR Progress:', m),
+        tessedit_char_whitelist: '0123456789'
+    }).then(({ data: { text } }) => {
+        const cleanedText = text.replace(/[^0-9]/g, '');
 
-      const input = document.querySelector('#reg_vcode');
-      if (input) input.value = cleanedText;
-/*
-      const loginButton = document.querySelector('#loginbtn'); // 根據 id 選擇按鈕
-        if (loginButton) {
-          console.log('找到登入按鈕，模擬點擊');
-          loginButton.click(); // 模擬點擊按鈕
+        if (cleanedText.length === 4) {
+            console.log('CAPTCHA identified:', cleanedText);
+            const input = document.querySelector('#reg_vcode');
+            if (input) input.value = cleanedText;
         } else {
-          console.error('找不到登入按鈕');
+            console.warn('Incorrect CAPTCHA length, attempting further refinement...');
+            // Retry preprocessing with adjusted threshold or refresh CAPTCHA
+            captchaImage.click();
+            setTimeout(() => processCaptcha(captchaImage), 1000);
         }
+    }).catch(error => {
+        console.error('OCR Error, retrying:', error);
+        captchaImage.click(); // Click the image to refresh CAPTCHA
+        setTimeout(() => processCaptcha(captchaImage), 1000); // Retry after 1 second
+    });
 
-
-      const intervalId = setInterval(() => {
-        const loginButton2 = document.querySelector('input[type="submit"].btn.btn-primary.btn-block');
-        if (loginButton2) {
-          console.log('找到登入按鈕，模擬點擊');
-          loginButton2.click(); // 模擬點擊按鈕
-          clearInterval(intervalId); // 停止定時檢查
-        }
-      }, 50); // 每 500 毫秒檢查一次
-*/   
-
-  }).catch(error => {
-      console.error('OCR Error, retrying:', error);
-      captchaImage.click(); // Click the image to refresh CAPTCHA
-      setTimeout(() => processCaptcha(captchaImage), 1000); // Retry after 1 second
-  });
 }
