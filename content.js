@@ -1,54 +1,61 @@
 // content.js
-
 chrome.runtime.sendMessage({ action: 'loadTesseract' }, (response) => {
-  console.log('消息響應:', response);
+  console.log('Message response:', response);
   if (response.success) {
-      console.log('Tesseract.js 已經加載');
-      initializeCaptchaHandling();
+      console.log('Tesseract.js loaded successfully.');
+      initializeCaptchaHandler();
   } else {
-      console.error('Tesseract.js 加載失敗');
+      console.error('Failed to load Tesseract.js.');
   }
 });
 
-function initializeCaptchaHandling() {
-  console.log('檢查 CAPTCHA 圖像是否已存在...');
+function initializeCaptchaHandler() {
   const captchaImage = document.querySelector('#imgcode');
 
   if (captchaImage && captchaImage.complete && captchaImage.naturalWidth > 0) {
-      console.log('直接找到 CAPTCHA 圖像:', captchaImage);
-      solveCaptcha(captchaImage);
+      console.log('CAPTCHA image detected:', captchaImage);
+      processCaptcha(captchaImage);
   } else {
-      console.log('未找到 CAPTCHA 圖像，開始監測 DOM 變化...');
-      observeDomChanges();
+      console.log('CAPTCHA image not found. Monitoring DOM changes...');
+      observeDomForCaptcha();
   }
 }
 
-function observeDomChanges() {
+function observeDomForCaptcha() {
   const observer = new MutationObserver(() => {
-      console.log('DOM 發生變化，嘗試查找 CAPTCHA 圖像...');
       const captchaImage = document.querySelector('#imgcode');
       if (captchaImage && captchaImage.complete && captchaImage.naturalWidth > 0) {
-          console.log('找到 CAPTCHA 圖像:', captchaImage);
-          observer.disconnect(); // 停止監測
-          solveCaptcha(captchaImage);
+          console.log('CAPTCHA image found:', captchaImage);
+          observer.disconnect();
+          processCaptcha(captchaImage);
       }
   });
 
   observer.observe(document.body, {
       childList: true,
       subtree: true,
-      attributes: true, // 監測屬性變化
-      attributeFilter: ['src'] // 監測 `src` 屬性變化
+      attributes: true,
+      attributeFilter: ['src']
   });
 }
 
-function preprocessImage(captchaImage) {
+function preprocessImage(image) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  canvas.width = captchaImage.naturalWidth || captchaImage.width;
-  canvas.height = captchaImage.naturalHeight || captchaImage.height;
 
-  ctx.drawImage(captchaImage, 0, 0);
+  const naturalWidth = image.naturalWidth || image.width;
+  const naturalHeight = image.naturalHeight || image.height;
+
+  if (naturalWidth === 0 || naturalHeight === 0) {
+      console.error('Image dimensions are zero, cannot preprocess.');
+      return null;
+  }
+
+  canvas.width = naturalWidth * 2;
+  canvas.height = naturalHeight * 2;
+
+  ctx.scale(2, 2);
+  ctx.drawImage(image, 0, 0);
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
@@ -56,39 +63,61 @@ function preprocessImage(captchaImage) {
   for (let i = 0; i < data.length; i += 4) {
       const gray = 0.3 * data[i] + 0.59 * data[i + 1] + 0.11 * data[i + 2];
       const binary = gray > 128 ? 255 : 0;
-      data[i] = binary;
-      data[i + 1] = binary;
-      data[i + 2] = binary;
+      data[i] = data[i + 1] = data[i + 2] = binary;
   }
 
   ctx.putImageData(imageData, 0, 0);
-
   return canvas;
 }
 
-function solveCaptcha(captchaImage) {
+function processCaptcha(captchaImage) {
   const processedCanvas = preprocessImage(captchaImage);
 
-  Tesseract.recognize(
-      processedCanvas.toDataURL(),
-      'eng',
-      {
-          logger: (m) => console.log('OCR 進度:', m),
-          tessedit_char_whitelist: '0123456789'
-      }
-  ).then(({ data: { text, confidence } }) => {
-      if (confidence < 70) {
-          console('可能有錯誤。');
+  if (!processedCanvas) {
+      console.warn('Preprocessing failed, retrying...');
+      captchaImage.click();
+      setTimeout(() => processCaptcha(captchaImage), 1000);
+      return;
+  }
+
+  Tesseract.recognize(processedCanvas.toDataURL(), 'eng', {
+      logger: (m) => console.log('OCR Progress:', m),
+      tessedit_char_whitelist: '0123456789'
+  }).then(({ data: { text } }) => {
+      const cleanedText = text.replace(/[^0-9]/g, '');
+      if (cleanedText.length !== 4) {
+          console.warn('Incorrect CAPTCHA length, retrying...');
+          captchaImage.click(); // Click the image to refresh CAPTCHA
+          setTimeout(() => processCaptcha(captchaImage), 1000); // Retry after 1 second
           return;
       }
-      const captchaText = text.trim();
-      console.log('高信心 CAPTCHA 識別:', captchaText);
+      console.log('CAPTCHA identified:', cleanedText);
 
-      const captchaInput = document.querySelector('#reg_vcode');
-      if (captchaInput) {
-          captchaInput.value = captchaText;
-      }
+      const input = document.querySelector('#reg_vcode');
+      if (input) input.value = cleanedText;
+/*
+      const loginButton = document.querySelector('#loginbtn'); // 根據 id 選擇按鈕
+        if (loginButton) {
+          console.log('找到登入按鈕，模擬點擊');
+          loginButton.click(); // 模擬點擊按鈕
+        } else {
+          console.error('找不到登入按鈕');
+        }
+
+
+      const intervalId = setInterval(() => {
+        const loginButton2 = document.querySelector('input[type="submit"].btn.btn-primary.btn-block');
+        if (loginButton2) {
+          console.log('找到登入按鈕，模擬點擊');
+          loginButton2.click(); // 模擬點擊按鈕
+          clearInterval(intervalId); // 停止定時檢查
+        }
+      }, 50); // 每 500 毫秒檢查一次
+*/   
+
   }).catch(error => {
-      console.error('OCR 識別錯誤:', error);
+      console.error('OCR Error, retrying:', error);
+      captchaImage.click(); // Click the image to refresh CAPTCHA
+      setTimeout(() => processCaptcha(captchaImage), 1000); // Retry after 1 second
   });
 }
